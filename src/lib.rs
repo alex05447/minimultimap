@@ -141,7 +141,7 @@ impl<'a, K, V> EntryMut<'a, K, V> {
                     let remaining = values
                         .pop()
                         // We know there's exactly one element in the `Vec`.
-                        .unwrap_or_else(|| unsafe { unreachable_unchecked() });
+                        .unwrap_or_else(|| unreachable_unchecked());
 
                     let _ = std::mem::replace(self.0.get_mut(), Entry::One(remaining));
                 }
