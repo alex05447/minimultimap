@@ -7,18 +7,20 @@
 //!
 //! Implements only a limited necessary subset of [`HashMap`] functionality.
 
-use std::{
-    borrow::Borrow,
-    collections::{
-        hash_map::{Entry as HashMapEntry, Iter as HashMapIter, OccupiedEntry, RandomState},
-        HashMap,
+use {
+    miniunchecked::*,
+    std::{
+        borrow::Borrow,
+        collections::{
+            hash_map::{Entry as HashMapEntry, Iter as HashMapIter, OccupiedEntry, RandomState},
+            HashMap,
+        },
+        hash::{BuildHasher, Hash},
+        iter::Iterator,
+        num::NonZeroUsize,
+        ops::{Deref, DerefMut},
+        slice::{self, Iter as SliceIter, IterMut as SliceIterMut},
     },
-    hash::{BuildHasher, Hash},
-    hint::unreachable_unchecked,
-    iter::Iterator,
-    num::NonZeroUsize,
-    ops::{Deref, DerefMut},
-    slice::{self, Iter as SliceIter, IterMut as SliceIterMut},
 };
 
 /// One or multiple values in the multimap associated with a given key.
@@ -94,22 +96,29 @@ impl<'a, K, V> EntryMut<'a, K, V> {
     pub fn remove(mut self, index: usize) -> V {
         match self.0.get_mut() {
             Entry::One(_) => {
-                assert_eq!(index, 0);
+                assert_eq!(
+                    index, 0,
+                    "remove index (is {}) should be < len (is 1)",
+                    index
+                );
                 match self.0.remove_entry().1 {
                     Entry::One(v) => v,
                     // We know the current entry is for a single value.
-                    Entry::Multiple(_) => unsafe { unreachable_unchecked() },
+                    Entry::Multiple(_) => unsafe { unreachable_dbg!() },
                 }
             }
             Entry::Multiple(values) => {
                 debug_assert!(values.len() >= 2);
+                assert!(
+                    index < values.len(),
+                    "remove index (is {}) should be < len (is {})",
+                    index,
+                    values.len()
+                );
                 let val = values.swap_remove(index);
                 if values.len() == 1 {
-                    let remaining = match values.pop() {
-                        Some(remaining) => remaining,
-                        // We know there's exactly one element in the `Vec`.
-                        None => unsafe { unreachable_unchecked() },
-                    };
+                    // We know there's exactly one element in the `Vec`.
+                    let remaining = unsafe { values.pop().unwrap_unchecked_dbg() };
                     let _ = std::mem::replace(self.0.get_mut(), Entry::One(remaining));
                 }
                 val
@@ -127,11 +136,15 @@ impl<'a, K, V> EntryMut<'a, K, V> {
     pub unsafe fn remove_unchecked(mut self, index: usize) -> V {
         match self.0.get_mut() {
             Entry::One(_) => {
-                debug_assert_eq!(index, 0);
+                debug_assert_eq!(
+                    index, 0,
+                    "remove index (is {}) should be < len (is 1)",
+                    index
+                );
                 match self.0.remove_entry().1 {
                     Entry::One(v) => v,
                     // We know the current entry is for a single value.
-                    Entry::Multiple(_) => unreachable_unchecked(),
+                    Entry::Multiple(_) => unreachable_dbg!(),
                 }
             }
             Entry::Multiple(values) => {
@@ -141,7 +154,7 @@ impl<'a, K, V> EntryMut<'a, K, V> {
                     let remaining = values
                         .pop()
                         // We know there's exactly one element in the `Vec`.
-                        .unwrap_or_else(|| unreachable_unchecked());
+                        .unwrap_unchecked_dbg();
 
                     let _ = std::mem::replace(self.0.get_mut(), Entry::One(remaining));
                 }
@@ -155,7 +168,10 @@ impl<'a, K, V> EntryMut<'a, K, V> {
 /// The caller guarantess `index` is strictly less than `vec.len()`.
 unsafe fn swap_remove<T>(vec: &mut Vec<T>, index: usize) -> T {
     let len = vec.len();
-    debug_assert!(index < len);
+    assert!(
+        index < len,
+        "remove index (is {index}) should be < len (is {len})",
+    );
 
     // We replace self[index] with the last element. Note that if the
     // bounds check above succeeds there must be a last element (which
@@ -175,9 +191,19 @@ unsafe fn swap_remove<T>(vec: &mut Vec<T>, index: usize) -> T {
 /// Implements only a limited necessary subset of [`HashMap`] functionality.
 pub struct MultiMap<K, V, S = RandomState>(HashMap<K, Entry<V>, S>);
 
-impl<K, V> MultiMap<K, V, RandomState> {
+impl<K, V> MultiMap<K, V> {
     pub fn new() -> Self {
         Self(HashMap::new())
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(HashMap::with_capacity(capacity))
+    }
+}
+
+impl<K, V, S> MultiMap<K, V, S> {
+    pub fn with_capacity_and_hasher(capacity: usize, hash_builder: S) -> Self {
+        Self(HashMap::with_capacity_and_hasher(capacity, hash_builder))
     }
 }
 
@@ -361,10 +387,12 @@ impl<'a, K, V> Iterator for MultiMapIter<'a, K, V> {
                 Entry::Multiple(values) => {
                     debug_assert!(values.len() >= 2);
                     let mut values = values.iter();
-                    let v = values
-                        .next()
-                        // We know `values` contains at least 2 values.
-                        .unwrap_or_else(|| unsafe { unreachable_unchecked() });
+                    let v = unsafe {
+                        values
+                            .next()
+                            // We know `values` contains at least 2 values.
+                            .unwrap_unchecked_dbg()
+                    };
                     self.entry_iter.replace((k, values));
                     Some((k, v))
                 }
@@ -403,11 +431,11 @@ fn insert_into_entry<'a, K, V>(
                     vec_push_front(value, existing);
                 } else {
                     // We know the existing value was `One`.
-                    unsafe { unreachable_unchecked() };
+                    unsafe { unreachable_dbg!() };
                 }
             } else {
                 // We know the just inserted value was `Multiple`.
-                unsafe { unreachable_unchecked() };
+                unsafe { unreachable_dbg!() };
             }
             unsafe { NonZeroUsize::new_unchecked(1) }
         }
