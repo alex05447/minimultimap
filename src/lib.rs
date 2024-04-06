@@ -17,7 +17,8 @@ use {
             },
             HashMap, TryReserveError,
         },
-        fmt::{self, Debug, Formatter},
+        error::Error,
+        fmt::{self, Debug, Display, Formatter},
         hash::{BuildHasher, Hash},
         iter::{FusedIterator, Iterator},
         num::NonZeroUsize,
@@ -41,11 +42,22 @@ pub enum EntryValues<V> {
 /// Error kind returned when trying to insert a new value into the [`MultiMap`] entry.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum InsertErrorKind {
-    /// Insert index was out of bounds.
+    /// Insert index is out of bounds.
     /// Contains the (non-zero) number of existing values.
     IndexOutOfBounds(NonZeroUsize),
-    /// Value was not unique.
+    /// Inserted value is not unique.
     ValueNotUnique,
+}
+
+impl Display for InsertErrorKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            InsertErrorKind::IndexOutOfBounds(size) => {
+                write!(f, "insert index is out of bounds (size is {size})")
+            }
+            InsertErrorKind::ValueNotUnique => write!(f, "inserted value is not unique"),
+        }
+    }
 }
 
 /// Error returned when inserting a new value into the [`MultiMap`] entry.
@@ -72,6 +84,14 @@ impl<V> InsertError<V> {
         }
     }
 }
+
+impl<V: Debug> Display for InsertError<V> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "value {:?} not inserted: {}", self.value, self.error)
+    }
+}
+
+impl<V: Debug> Error for InsertError<V> {}
 
 /// Result returned when removing a value from the (non-empty) [`EntryValues`].
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -233,6 +253,29 @@ impl<V> EntryValues<V> {
         }
     }
 
+    fn retain<F>(self, mut f: F) -> Option<Self>
+    where
+        F: FnMut(&mut V) -> bool,
+    {
+        match self {
+            EntryValues::One(mut value) => {
+                if f(&mut value) {
+                    Some(EntryValues::One(value))
+                } else {
+                    None
+                }
+            }
+            EntryValues::Multiple(mut values) => {
+                values.retain_mut(f);
+                if values.is_empty() {
+                    None
+                } else {
+                    Some(Self::multiple_to_one(values))
+                }
+            }
+        }
+    }
+
     fn multiple_to_one(mut values: Vec<V>) -> Self {
         debug_assert!(!values.is_empty());
         if values.len() == 1 {
@@ -337,27 +380,147 @@ impl<K, V, S> MultiMap<K, V, S> {
     }
 
     /// See [`HashMap::keys`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let pairs = [(7, "foo"), (9, "bar"), (7, "baz")];
+    ///
+    /// let mmap = MultiMap::from(pairs);
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// let keys = mmap.keys();
+    ///
+    /// assert_eq!(keys.len(), 2);
+    ///
+    /// for k in keys {
+    ///     assert!(*k == 7 || *k == 9);
+    /// }
+    /// ```
     pub fn keys(&self) -> Keys<'_, K, EntryValues<V>> {
         self.inner.keys()
     }
 
     /// See [`HashMap::into_keys`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let pairs = [(7, "foo"), (9, "bar"), (7, "baz")];
+    ///
+    /// let mmap = MultiMap::from(pairs);
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// let mut num_keys = 0;
+    ///
+    /// for k in mmap.into_keys() {
+    ///     assert!(k == 7 || k == 9);
+    ///     num_keys += 1;
+    /// }
+    ///
+    /// assert_eq!(num_keys, 2);
+    /// ```
     #[inline]
     pub fn into_keys(self) -> IntoKeys<K, EntryValues<V>> {
         self.inner.into_keys()
     }
 
     /// See [`HashMap::values`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::{ MultiMap, EntryValues };
+    ///
+    /// let pairs = [(7, "foo"), (9, "bar"), (7, "baz")];
+    ///
+    /// let mmap = MultiMap::from(pairs);
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// let values = mmap.values();
+    ///
+    /// assert_eq!(values.len(), 2);
+    ///
+    /// for v in values {
+    ///     assert!(
+    ///         *v == EntryValues::Multiple(vec!["foo", "baz"]) ||
+    ///         *v == EntryValues::One("bar")
+    ///     );
+    /// }
+    /// ```
     pub fn values(&self) -> Values<'_, K, EntryValues<V>> {
         self.inner.values()
     }
 
     /// See [`HashMap::values_mut`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::{ MultiMap, EntryValues };
+    ///
+    /// let pairs = [(7, "foo"), (9, "bar"), (7, "baz")];
+    ///
+    /// let mut mmap = MultiMap::from(pairs);
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// let values = mmap.values_mut();
+    ///
+    /// assert_eq!(values.len(), 2);
+    ///
+    /// for v in values {
+    ///     assert!(
+    ///         *v == EntryValues::Multiple(vec!["foo", "baz"]) ||
+    ///         *v == EntryValues::One("bar")
+    ///     );
+    ///
+    ///     v[0] = "bob";
+    /// }
+    ///
+    /// for v in mmap.values() {
+    ///     assert!(
+    ///         *v == EntryValues::Multiple(vec!["bob", "baz"]) ||
+    ///         *v == EntryValues::One("bob")
+    ///     );
+    /// }
+    /// ```
     pub fn values_mut(&mut self) -> ValuesMut<'_, K, EntryValues<V>> {
         self.inner.values_mut()
     }
 
     /// See [`HashMap::into_values`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::{ MultiMap, EntryValues };
+    ///
+    /// let pairs = [(7, "foo"), (9, "bar"), (7, "baz")];
+    ///
+    /// let mmap = MultiMap::from(pairs);
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// let mut num_values = 0;
+    ///
+    /// for v in mmap.into_values() {
+    ///     assert!(
+    ///         v == EntryValues::Multiple(vec!["foo", "baz"]) ||
+    ///         v == EntryValues::One("bar")
+    ///     );
+    ///     num_values += 1;
+    /// }
+    ///
+    /// assert_eq!(num_values, 2);
+    /// ```
     #[inline]
     pub fn into_values(self) -> IntoValues<K, EntryValues<V>> {
         self.inner.into_values()
@@ -376,7 +539,10 @@ impl<K, V, S> MultiMap<K, V, S> {
     /// assert_eq!(mmap.len(), 2);
     /// assert_eq!(mmap.multi_len(), 3);
     ///
-    /// for (k, vs) in mmap.iter() {
+    /// let iter = mmap.iter();
+    /// assert_eq!(iter.len(), 2);
+    ///
+    /// for (k, vs) in iter {
     ///     for v in vs.iter() {
     ///         assert!(pairs.contains(&(*k, *v)));
     ///     }
@@ -391,7 +557,7 @@ impl<K, V, S> MultiMap<K, V, S> {
     /// # Examples
     ///
     /// ```
-    /// use minimultimap::MultiMap;
+    /// use minimultimap::{ MultiMap, EntryValues };
     ///
     /// let pairs = [(7, "foo".to_string()), (9, "bar".to_string()), (7, "baz".to_string())];
     ///
@@ -399,13 +565,22 @@ impl<K, V, S> MultiMap<K, V, S> {
     /// assert_eq!(mmap.len(), 2);
     /// assert_eq!(mmap.multi_len(), 3);
     ///
-    /// for (k, vs) in mmap.iter_mut() {
+    /// let iter = mmap.iter_mut();
+    /// assert_eq!(iter.len(), 2);
+    ///
+    /// for (k, vs) in iter {
     ///     for v in vs.iter_mut() {
     ///         assert!(pairs.contains(&(*k, v.clone())));
     ///         v.push_str(&format!("_{}", *k));
     ///     }
     /// }
     ///
+    /// for v in mmap.values() {
+    ///     assert!(
+    ///         *v == EntryValues::Multiple(vec!["foo_7".to_string(), "baz_7".to_string()]) ||
+    ///         *v == EntryValues::One("bar_9".to_string())
+    ///     );
+    /// }
     /// ```
     pub fn iter_mut(&mut self) -> IterMut<'_, K, EntryValues<V>> {
         self.inner.iter_mut()
@@ -413,7 +588,7 @@ impl<K, V, S> MultiMap<K, V, S> {
 
     /// Returns an iterator over (references to) all key-value tuples in the [`MultiMap`], in unspecified order.
     ///
-    /// Similar to [`iter()`](Self::iter), but the same key may be returned multiple times with values which
+    /// Similar to [`iter()`](Self::iter), but the same key may be returned multiple times with single values which
     /// might or might not be unique, depending on how they were inserted into the [`MultiMap`].
     ///
     /// # Examples
@@ -427,7 +602,10 @@ impl<K, V, S> MultiMap<K, V, S> {
     /// assert_eq!(mmap.len(), 2);
     /// assert_eq!(mmap.multi_len(), 3);
     ///
-    /// for (k, v) in mmap.multi_iter() {
+    /// let iter = mmap.multi_iter();
+    /// assert_eq!(iter.len(), 3);
+    ///
+    /// for (k, v) in iter {
     ///     assert!(pairs.contains(&(*k, *v)));
     /// }
     /// ```
@@ -437,8 +615,41 @@ impl<K, V, S> MultiMap<K, V, S> {
 
     /// Returns an iterator over (mutable references to) all key-value tuples in the [`MultiMap`], in unspecified order.
     ///
-    /// Similar to [`iter_mut()`](Self::iter_mut), but the same key may be returned multiple times with values which
+    /// Similar to [`iter_mut()`](Self::iter_mut), but the same key may be returned multiple times with single values which
     /// might or might not be unique, depending on how they were inserted into the [`MultiMap`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::{ MultiMap, EntryValues };
+    ///
+    /// let pairs = [(7, "foo".to_string()), (9, "bar".to_string()), (7, "baz".to_string())];
+    ///
+    /// let mut mmap = MultiMap::from(pairs.clone());
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// let iter = mmap.multi_iter_mut();
+    /// assert_eq!(iter.len(), 3);
+    ///
+    /// for (k, v) in iter {
+    ///     assert!(pairs.contains(&(*k, v.clone())));
+    ///     v.push_str(&format!("_{}", *k));
+    /// }
+    ///
+    /// for v in mmap.values() {
+    ///     assert!(
+    ///         *v == EntryValues::Multiple(vec!["foo_7".to_string(), "baz_7".to_string()]) ||
+    ///         *v == EntryValues::One("bar_9".to_string())
+    ///     );
+    /// }
+    /// ```
+    pub fn multi_iter_mut(&mut self) -> MultiIterMut<'_, K, V> {
+        let num_values = self.num_values;
+        MultiIterMut::new(self.iter_mut(), num_values)
+    }
+
+    /// See [`HashMap::len`], but replace "elements" with "keys".
     ///
     /// # Examples
     ///
@@ -450,24 +661,24 @@ impl<K, V, S> MultiMap<K, V, S> {
     /// let mut mmap = MultiMap::from(pairs.clone());
     /// assert_eq!(mmap.len(), 2);
     /// assert_eq!(mmap.multi_len(), 3);
-    ///
-    /// for (k, v) in mmap.multi_iter_mut() {
-    ///     assert!(pairs.contains(&(*k, v.clone())));
-    ///     v.push_str(&format!("_{}", *k));
-    /// }
-    ///
     /// ```
-    pub fn multi_iter_mut(&mut self) -> MultiIterMut<'_, K, V> {
-        let num_values = self.num_values;
-        MultiIterMut::new(self.iter_mut(), num_values)
-    }
-
-    /// See [`HashMap::len`], but replace "elements" with "keys".
     pub fn len(&self) -> usize {
         self.inner.len()
     }
 
     /// Unlike [`len()`](Self::len), returns the total number of values on the [`MultiMap`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let pairs = [(7, "foo".to_string()), (9, "bar".to_string()), (7, "baz".to_string())];
+    ///
+    /// let mut mmap = MultiMap::from(pairs.clone());
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    /// ```
     #[inline]
     pub fn multi_len(&self) -> usize {
         self.num_values
@@ -496,10 +707,10 @@ impl<K, V, S> MultiMap<K, V, S> {
     ///
     /// let capacity = mmap.capacity();
     ///
-    /// for (k, v) in mmap.drain().take(2) {
+    /// for (k, vs) in mmap.drain().take(2) {
     ///     assert!(
-    ///         ((k == 1) && (*v == ["a", "c"]))
-    ///         || ((k == 2) && (*v == ["b"]))
+    ///         ((k == 1) && (*vs == ["a", "c"]))
+    ///         || ((k == 2) && (*vs == ["b"]))
     ///     );
     /// }
     ///
@@ -515,15 +726,37 @@ impl<K, V, S> MultiMap<K, V, S> {
     }
 
     /// See [`HashMap::retain`], but replace "elements" with "keys".
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let mut mmap = MultiMap::new();
+    /// mmap.add(1, "a");
+    /// mmap.add(2, "b");
+    /// mmap.add(1, "c");
+    ///
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// mmap.retain(|k, vs| *k != 1);
+    ///
+    /// assert_eq!(mmap.len(), 1);
+    /// assert_eq!(mmap.multi_len(), 1);
+    ///
+    /// assert!(!mmap.contains_key(&1));
+    /// assert_eq!(mmap[&2], ["b"]);
+    /// ```
     #[inline]
     pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&K, &mut [V]) -> bool,
     {
-        self.inner.retain(|k, v| {
-            let retain = f(k, v.deref_mut());
+        self.inner.retain(|k, vs| {
+            let retain = f(k, vs.deref_mut());
             if !retain {
-                let len = v.len();
+                let len = vs.len();
                 debug_assert!(len > 0);
                 debug_assert!(self.num_values >= len);
                 self.num_values -= len;
@@ -532,7 +765,94 @@ impl<K, V, S> MultiMap<K, V, S> {
         })
     }
 
+    /// Similar to [`retain()`](Self::retain), but the same key may be passed to the predicate multiple times with single values which
+    /// might or might not be unique, depending on how they were inserted into the [`MultiMap`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let mut mmap = MultiMap::new();
+    /// mmap.add(1, "a");
+    /// mmap.add(2, "b");
+    /// mmap.add(1, "c");
+    /// mmap.add(3, "d");
+    /// mmap.add(3, "e");
+    ///
+    /// assert_eq!(mmap.len(), 3);
+    /// assert_eq!(mmap.multi_len(), 5);
+    ///
+    /// mmap.multi_retain(|k, v| *k == 3 || *v == "a");
+    ///
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// assert_eq!(mmap[&1], ["a"]);
+    /// assert!(!mmap.contains_key(&2));
+    /// assert_eq!(mmap[&3], ["d", "e"]);
+    /// ```
+    #[inline]
+    pub fn multi_retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&K, &mut V) -> bool,
+    {
+        self.inner.retain(|k, vs| {
+            let len = vs.len();
+            debug_assert!(len > 0);
+
+            // Temporarily swap the existing value(s) with a dummy.
+            let empty = EntryValues::Multiple(vec![]);
+            let previous = std::mem::replace(vs, empty);
+
+            match previous.retain(|v| f(k, v)) {
+                // Some value(s) retained. Put them back, retain the entry values.
+                Some(remaining) => {
+                    let remaining_len = remaining.len();
+                    debug_assert!(remaining_len > 0);
+                    debug_assert!(remaining_len <= len);
+
+                    let removed_len = len - remaining_len;
+                    debug_assert!(self.num_values >= removed_len);
+                    self.num_values -= removed_len;
+
+                    let empty_ = std::mem::replace(vs, remaining);
+                    debug_assert!(matches!(empty_, EntryValues::Multiple(..)));
+                    debug_assert!(empty_.is_empty());
+
+                    true
+                }
+                // No values retained. Do not retain the entry values.
+                None => {
+                    debug_assert!(self.num_values >= len);
+                    self.num_values -= len;
+
+                    false
+                }
+            }
+        })
+    }
+
     /// See [`HashMap::clear`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let pairs = [(7, "foo".to_string()), (9, "bar".to_string()), (7, "baz".to_string())];
+    ///
+    /// let mut mmap = MultiMap::from(pairs.clone());
+    /// assert!(!mmap.is_empty());
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// mmap.clear();
+    ///
+    /// assert!(mmap.is_empty());
+    /// assert_eq!(mmap.len(), 0);
+    /// assert_eq!(mmap.multi_len(), 0);
+    /// ```
     #[inline]
     pub fn clear(&mut self) {
         self.inner.clear();
@@ -586,6 +906,30 @@ where
     }
 
     /// See [`HashMap::entry`].
+    ///
+    /// ```
+    /// use minimultimap::{ MultiMap, Entry };
+    ///
+    /// let mut mmap = MultiMap::<i32, &str>::from_iter([(7, "foo"), (7, "bar"), (9, "baz")].into_iter());
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// assert!(matches!(mmap.entry(11), Entry::Vacant(..)));
+    ///
+    /// match mmap.entry(7) {
+    ///     Entry::Occupied(entry) => {
+    ///         assert_eq!(entry.get(), &["foo", "bar"]);
+    ///     },
+    ///     Entry::Vacant(_) => unreachable!(),
+    /// }
+    ///
+    /// match mmap.entry(9) {
+    ///     Entry::Occupied(entry) => {
+    ///         assert_eq!(entry.get(), &["baz"]);
+    ///     },
+    ///     Entry::Vacant(_) => unreachable!(),
+    /// }
+    /// ```
     #[inline]
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
         let map = self.into();
@@ -658,16 +1002,14 @@ where
     /// NOTE: use [`add_unique()`](Self::add_unique) to only add unique values for the key `k`.
     #[inline]
     pub fn add(&mut self, k: K, v: V) -> Option<NonZeroUsize> {
-        match self.inner.entry(k) {
-            HashMapEntry::Occupied(mut e) => {
-                let len = e.get().len_nonzero();
-                e.get_mut().push(v);
-                self.num_values += 1;
+        match self.entry(k) {
+            Entry::Occupied(mut e) => {
+                let len = e.get_entry_values().len_nonzero();
+                e.push(v);
                 Some(len)
             }
-            HashMapEntry::Vacant(e) => {
-                e.insert(EntryValues::One(v));
-                self.num_values += 1;
+            Entry::Vacant(e) => {
+                e.insert(v);
                 None
             }
         }
@@ -755,7 +1097,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use {std::num::NonZeroUsize, minimultimap::{MultiMap, AddUniqueResult}};
+    /// use { std::num::NonZeroUsize, minimultimap::{ MultiMap, AddUniqueResult } };
     ///
     /// let mut mmap = MultiMap::<i32, String>::default();
     ///
@@ -776,19 +1118,17 @@ where
     /// ```
     #[inline]
     pub fn add_unique(&mut self, k: K, v: V) -> AddUniqueResult<V> {
-        match self.inner.entry(k) {
-            HashMapEntry::Occupied(mut e) => {
-                let len = e.get().len_nonzero();
-                if let Some(non_unique) = e.get_mut().push_unique(v) {
+        match self.entry(k) {
+            Entry::Occupied(mut e) => {
+                let len = e.get_entry_values().len_nonzero();
+                if let Some(non_unique) = e.push_unique(v) {
                     AddUniqueResult::ValueNotUnique((non_unique, len))
                 } else {
-                    self.num_values += 1;
                     AddUniqueResult::ValueUnique(len)
                 }
             }
-            HashMapEntry::Vacant(e) => {
-                e.insert(EntryValues::One(v));
-                self.num_values += 1;
+            Entry::Vacant(e) => {
+                e.insert(v);
                 AddUniqueResult::KeyDidNotExist
             }
         }
@@ -918,7 +1258,11 @@ struct ValuesFormatter<'a, V>(&'a [V]);
 
 impl<'a, V: Debug> Debug for ValuesFormatter<'a, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.0).finish()
+        if self.0.len() > 1 {
+            f.debug_list().entries(self.0).finish()
+        } else {
+            self.0[0].fmt(f)
+        }
     }
 }
 
@@ -926,7 +1270,14 @@ impl<K: Debug, V: Debug, S> Debug for OccupiedEntry<'_, K, V, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OccupiedEntry")
             .field("key", self.key())
-            .field("value(s)", &ValuesFormatter(self.get()))
+            .field(
+                if self.get().len() > 1 {
+                    "values"
+                } else {
+                    "value"
+                },
+                &ValuesFormatter(self.get()),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -1048,7 +1399,7 @@ impl<'a, K, V: Default, S> Entry<'a, K, V, S> {
 pub struct RemoveResult<'a, K, V, S> {
     /// Removed value.
     pub removed: V,
-    /// If the removed `value` was not last, the entry with the rest of the remaining values.
+    /// If the removed `value` was not last, the [`OccupiedEntry`]` with the remaining values.
     pub remaining: Option<OccupiedEntry<'a, K, V, S>>,
 }
 
@@ -1082,13 +1433,13 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     /// ```
     /// use minimultimap::{ MultiMap, Entry, EntryValues };
     ///
-    /// let mut mmap = MultiMap::from([(7, "foo".to_string()), (9, "bar".to_string()), (7, "baz".to_string())]);
+    /// let mut mmap = MultiMap::from([(7, "foo"), (9, "bar"), (7, "baz")]);
     /// assert_eq!(mmap.len(), 2);
     /// assert_eq!(mmap.multi_len(), 3);
     ///
     /// match mmap.entry(7) {
     ///     Entry::Occupied(entry) => {
-    ///         assert_eq!(entry.remove_entry(), (7, EntryValues::Multiple(vec!["foo".to_string(), "baz".to_string()])));
+    ///         assert_eq!(entry.remove_entry(), (7, EntryValues::Multiple(vec!["foo", "baz"])));
     ///     },
     ///     Entry::Vacant(_) => {},
     /// }
@@ -1168,7 +1519,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     ///     Entry::Occupied(entry) => {
     ///         assert_eq!(entry.remove(), EntryValues::Multiple(vec!["foo".to_string(), "baz".to_string()]));
     ///     },
-    ///     Entry::Vacant(_) => {},
+    ///     Entry::Vacant(_) => unreachable!(),
     /// }
     ///
     /// assert!(!mmap.contains_key(&7));
@@ -1200,7 +1551,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     ///         assert!(entry.insert_at(2, "baz".to_string()).is_some());
     ///         assert!(entry.insert_at(0, "baz".to_string()).is_none());
     ///     },
-    ///     Entry::Vacant(_) => {},
+    ///     Entry::Vacant(_) => unreachable!(),
     /// }
     ///
     /// assert_eq!(mmap[&7], ["baz".to_string(), "foo".to_string()]);
@@ -1228,7 +1579,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     ///
     /// match mmap.entry(7) {
     ///     Entry::Occupied(mut entry) => entry.push("baz".to_string()),
-    ///     Entry::Vacant(_) => {},
+    ///     Entry::Vacant(_) => unreachable!(),
     /// }
     ///
     /// assert_eq!(mmap[&7], ["foo".to_string(), "baz".to_string()]);
@@ -1257,7 +1608,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     /// match mmap.entry(7) {
     ///     Entry::Occupied(mut entry) => {
     ///         match entry.remove_at(2) {
-    ///             Ok(_) => unreachable!(),
+    ///             Ok(_) => unreachable!("index `2` should be out of bounds"),
     ///             Err(entry) => {
     ///                 let removed = entry.remove_at(0).unwrap();
     ///                 assert_eq!(removed.removed, "foo".to_string());
@@ -1266,7 +1617,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     ///             },
     ///         }
     ///     },
-    ///     Entry::Vacant(_) => {},
+    ///     Entry::Vacant(_) => unreachable!(),
     /// }
     ///
     /// assert_eq!(mmap[&7], ["baz".to_string()]);
@@ -1294,7 +1645,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     /// match mmap.entry(7) {
     ///     Entry::Occupied(mut entry) => {
     ///         match entry.swap_remove_at(3) {
-    ///             Ok(_) => unreachable!(),
+    ///             Ok(_) => unreachable!("index `3` should be out of bounds"),
     ///             Err(entry) => {
     ///                 let removed = entry.swap_remove_at(0).unwrap();
     ///                 assert_eq!(removed.removed, "foo".to_string());
@@ -1303,7 +1654,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     ///             },
     ///         }
     ///     },
-    ///     Entry::Vacant(_) => {},
+    ///     Entry::Vacant(_) => unreachable!(),
     /// }
     ///
     /// assert_eq!(mmap[&7], ["bob".to_string(), "baz".to_string()]);
@@ -1333,7 +1684,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     ///         let remaining = removed.remaining.unwrap();
     ///         assert_eq!(remaining.get().len(), 1);
     ///     },
-    ///     Entry::Vacant(_) => {},
+    ///     Entry::Vacant(_) => unreachable!(),
     /// }
     ///
     /// assert_eq!(mmap[&7], ["foo".to_string()]);
@@ -1350,6 +1701,11 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
         }
     }
 
+    #[inline]
+    fn get_entry_values(&self) -> &EntryValues<V> {
+        self.inner.get()
+    }
+
     fn remove_at_impl(
         mut self,
         index: usize,
@@ -1364,12 +1720,14 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
                     // Removed the non-last value. Put the remaining value(s) back, return the removed value and the entry.
                     let empty_ = std::mem::replace(self.inner.get_mut(), remaining);
                     debug_assert!(matches!(empty_, EntryValues::Multiple(..)));
+                    debug_assert!(empty_.is_empty());
                     unsafe { self.map.as_mut() }.dec_num_values(1);
                     Ok(RemoveResult::not_last(removed, self))
                 } else {
                     // Removed the last value. Remove the entry, return the removed value.
                     let empty_ = self.inner.remove();
                     debug_assert!(matches!(empty_, EntryValues::Multiple(..)));
+                    debug_assert!(empty_.is_empty());
                     unsafe { self.map.as_mut() }.dec_num_values(1);
                     Ok(RemoveResult::last(removed))
                 }
@@ -1378,6 +1736,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
                 // Index out of bounds. Put the value(s) back, return the entry back.
                 let empty_ = std::mem::replace(self.inner.get_mut(), values);
                 debug_assert!(matches!(empty_, EntryValues::Multiple(..)));
+                debug_assert!(empty_.is_empty());
                 Err(self)
             }
         }
