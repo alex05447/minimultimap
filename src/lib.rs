@@ -865,11 +865,6 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.inner.hasher()
     }
 
-    fn inc_num_values(&mut self, num: usize) {
-        debug_assert!(num > 0);
-        self.num_values += num;
-    }
-
     fn dec_num_values(&mut self, num: usize) {
         debug_assert!(self.num_values >= num);
         self.num_values -= num;
@@ -933,11 +928,11 @@ where
     /// }
     /// ```
     #[inline]
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
-        let map = self.into();
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
+        let num_values = unsafe { NonNull::new_unchecked(&mut self.num_values as *mut _) };
         match self.inner.entry(key) {
-            HashMapEntry::Occupied(inner) => Entry::Occupied(OccupiedEntry { inner, map }),
-            HashMapEntry::Vacant(inner) => Entry::Vacant(VacantEntry { inner, map }),
+            HashMapEntry::Occupied(inner) => Entry::Occupied(OccupiedEntry { inner, num_values }),
+            HashMapEntry::Vacant(inner) => Entry::Vacant(VacantEntry { inner, num_values }),
         }
     }
 
@@ -1292,14 +1287,14 @@ where
 ///
 /// This type is needed (instead of just using the [`std::collections::hash_map::Entry`]) to correctly handle the number of values in the [`MultiMap`]
 /// when inserting/removing through the entry API.
-pub enum Entry<'a, K: 'a, V: 'a, S> {
+pub enum Entry<'a, K: 'a, V: 'a> {
     /// An occupied entry.
-    Occupied(OccupiedEntry<'a, K, V, S>),
+    Occupied(OccupiedEntry<'a, K, V>),
     /// A vacant entry.
-    Vacant(VacantEntry<'a, K, V, S>),
+    Vacant(VacantEntry<'a, K, V>),
 }
 
-impl<K: Debug, V: Debug, S> Debug for Entry<'_, K, V, S> {
+impl<K: Debug, V: Debug> Debug for Entry<'_, K, V> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Entry::Vacant(v) => f.debug_tuple("Entry").field(v).finish(),
@@ -1312,10 +1307,10 @@ impl<K: Debug, V: Debug, S> Debug for Entry<'_, K, V, S> {
 ///
 /// This type is needed (instead of just using the [`std::collections::hash_map::OccupiedEntry`]) to correctly handle the number of values in the [`MultiMap`]
 /// when inserting/removing through the entry API.
-pub struct OccupiedEntry<'a, K: 'a, V: 'a, S> {
+pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
     inner: HashMapOccupiedEntry<'a, K, EntryValues<V>>,
-    /// Pointer to the map needed to update the number of values.
-    map: NonNull<MultiMap<K, V, S>>,
+    /// Pointer to the number of values in the map, needed to update it when adding / removing values.
+    num_values: NonNull<usize>,
 }
 
 struct ValuesFormatter<'a, V>(&'a [V]);
@@ -1330,7 +1325,7 @@ impl<'a, V: Debug> Debug for ValuesFormatter<'a, V> {
     }
 }
 
-impl<K: Debug, V: Debug, S> Debug for OccupiedEntry<'_, K, V, S> {
+impl<K: Debug, V: Debug> Debug for OccupiedEntry<'_, K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OccupiedEntry")
             .field("key", self.key())
@@ -1350,13 +1345,13 @@ impl<K: Debug, V: Debug, S> Debug for OccupiedEntry<'_, K, V, S> {
 ///
 /// This type is needed (instead of just using the [`std::collections::hash_map::VacantEntry`]) to correctly handle the number of values in the [`MultiMap`]
 /// when inserting through the entry API.
-pub struct VacantEntry<'a, K: 'a, V: 'a, S> {
+pub struct VacantEntry<'a, K: 'a, V: 'a> {
     inner: HashMapVacantEntry<'a, K, EntryValues<V>>,
-    /// Pointer to the map needed to update the number of values.
-    map: NonNull<MultiMap<K, V, S>>,
+    /// Pointer to the number of values in the map, needed to update it when inserting a value.
+    num_values: NonNull<usize>,
 }
 
-impl<K: Debug, V, S> Debug for VacantEntry<'_, K, V, S> {
+impl<K: Debug, V> Debug for VacantEntry<'_, K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("VacantEntry").field(self.key()).finish()
     }
@@ -1392,7 +1387,7 @@ impl<K, V, S> IntoIterator for MultiMap<K, V, S> {
     }
 }
 
-impl<'a, K, V, S> Entry<'a, K, V, S> {
+impl<'a, K, V> Entry<'a, K, V> {
     /// See [`std::collections::hash_map::Entry::or_insert`].
     #[inline]
     pub fn or_insert(self, default: V) -> &'a mut [V] {
@@ -1448,7 +1443,7 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
     }
 }
 
-impl<'a, K, V: Default, S> Entry<'a, K, V, S> {
+impl<'a, K, V: Default> Entry<'a, K, V> {
     /// See [`std::collections::hash_map::Entry::or_default`].
     #[inline]
     pub fn or_default(self) -> &'a mut [V] {
@@ -1460,14 +1455,14 @@ impl<'a, K, V: Default, S> Entry<'a, K, V, S> {
 }
 
 /// Result returned when removing a value from an [`OccupiedEntry`].
-pub struct RemoveResult<'a, K, V, S> {
+pub struct RemoveResult<'a, K, V> {
     /// Removed value.
     pub removed: V,
     /// If the removed `value` was not last, the [`OccupiedEntry`]` with the remaining values.
-    pub remaining: Option<OccupiedEntry<'a, K, V, S>>,
+    pub remaining: Option<OccupiedEntry<'a, K, V>>,
 }
 
-impl<'a, K, V, S> RemoveResult<'a, K, V, S> {
+impl<'a, K, V> RemoveResult<'a, K, V> {
     fn last(removed: V) -> Self {
         Self {
             removed,
@@ -1475,7 +1470,7 @@ impl<'a, K, V, S> RemoveResult<'a, K, V, S> {
         }
     }
 
-    fn not_last(removed: V, remaining: OccupiedEntry<'a, K, V, S>) -> Self {
+    fn not_last(removed: V, remaining: OccupiedEntry<'a, K, V>) -> Self {
         Self {
             removed,
             remaining: Some(remaining),
@@ -1483,7 +1478,7 @@ impl<'a, K, V, S> RemoveResult<'a, K, V, S> {
     }
 }
 
-impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
+impl<'a, K, V> OccupiedEntry<'a, K, V> {
     /// See [`std::collections::hash_map::OccupiedEntry::key`].
     #[inline]
     pub fn key(&self) -> &K {
@@ -1515,7 +1510,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     #[inline]
     pub fn remove_entry(mut self) -> (K, EntryValues<V>) {
         let removed = self.inner.remove_entry();
-        unsafe { self.map.as_mut() }.dec_num_values(removed.1.len());
+        Self::dec_num_values(&mut self.num_values, removed.1.len());
         removed
     }
 
@@ -1564,7 +1559,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
         let previous = self.inner.insert(EntryValues::One(value));
         let num_previous = previous.len();
         debug_assert!(num_previous > 0);
-        unsafe { self.map.as_mut() }.dec_num_values(num_previous - 1);
+        Self::dec_num_values(&mut self.num_values, num_previous - 1);
         previous
     }
 
@@ -1593,8 +1588,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     #[inline]
     pub fn remove(mut self) -> EntryValues<V> {
         let removed = self.inner.remove();
-        debug_assert!(removed.len() > 0);
-        unsafe { self.map.as_mut() }.dec_num_values(removed.len());
+        Self::dec_num_values(&mut self.num_values, removed.len());
         removed
     }
 
@@ -1625,7 +1619,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     #[inline]
     pub fn insert_at(&mut self, index: usize, value: V) -> Option<V> {
         self.inner.get_mut().insert(index, value).or_else(|| {
-            unsafe { self.map.as_mut() }.inc_num_values(1);
+            self.inc_num_values(1);
             None
         })
     }
@@ -1653,7 +1647,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     #[inline]
     pub fn push(&mut self, value: V) {
         self.inner.get_mut().push(value);
-        unsafe { self.map.as_mut() }.inc_num_values(1);
+        self.inc_num_values(1);
     }
 
     /// Tries to remove the value at `index` from this occupied entry, shifting the remaining values, if any.
@@ -1689,7 +1683,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     /// assert_eq!(mmap.multi_len(), 2);
     /// ```
     #[inline]
-    pub fn remove_at(self, index: usize) -> Result<RemoveResult<'a, K, V, S>, Self> {
+    pub fn remove_at(self, index: usize) -> Result<RemoveResult<'a, K, V>, Self> {
         self.remove_at_impl(index, false)
     }
 
@@ -1726,7 +1720,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     /// assert_eq!(mmap.multi_len(), 3);
     /// ```
     #[inline]
-    pub fn swap_remove_at(self, index: usize) -> Result<RemoveResult<'a, K, V, S>, Self> {
+    pub fn swap_remove_at(self, index: usize) -> Result<RemoveResult<'a, K, V>, Self> {
         self.remove_at_impl(index, true)
     }
 
@@ -1756,7 +1750,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     /// assert_eq!(mmap.multi_len(), 2);
     /// ```
     #[inline]
-    pub fn pop(self) -> RemoveResult<'a, K, V, S> {
+    pub fn pop(self) -> RemoveResult<'a, K, V> {
         let len = self.get().len();
         debug_assert!(len > 0);
         unsafe {
@@ -1770,11 +1764,7 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
         self.inner.get()
     }
 
-    fn remove_at_impl(
-        mut self,
-        index: usize,
-        swap: bool,
-    ) -> Result<RemoveResult<'a, K, V, S>, Self> {
+    fn remove_at_impl(mut self, index: usize, swap: bool) -> Result<RemoveResult<'a, K, V>, Self> {
         // Temporarily swap the existing value(s) with a dummy.
         let empty = EntryValues::Multiple(vec![]);
         let previous = std::mem::replace(self.inner.get_mut(), empty);
@@ -1785,14 +1775,14 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
                     let empty_ = std::mem::replace(self.inner.get_mut(), remaining);
                     debug_assert!(matches!(empty_, EntryValues::Multiple(..)));
                     debug_assert!(empty_.is_empty());
-                    unsafe { self.map.as_mut() }.dec_num_values(1);
+                    Self::dec_num_values(&mut self.num_values, 1);
                     Ok(RemoveResult::not_last(removed, self))
                 } else {
                     // Removed the last value. Remove the entry, return the removed value.
                     let empty_ = self.inner.remove();
                     debug_assert!(matches!(empty_, EntryValues::Multiple(..)));
                     debug_assert!(empty_.is_empty());
-                    unsafe { self.map.as_mut() }.dec_num_values(1);
+                    Self::dec_num_values(&mut self.num_values, 1);
                     Ok(RemoveResult::last(removed))
                 }
             }
@@ -1805,9 +1795,21 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
             }
         }
     }
+
+    fn inc_num_values(&mut self, num: usize) {
+        debug_assert!(num > 0);
+        unsafe { *self.num_values.as_mut() += num };
+    }
+
+    // `num` can be `0`.
+    fn dec_num_values(num_values: &mut NonNull<usize>, num: usize) {
+        let current_num_values = unsafe { *num_values.as_ref() };
+        debug_assert!(current_num_values >= num);
+        unsafe { *num_values.as_mut() -= num };
+    }
 }
 
-impl<'a, K, V, S> OccupiedEntry<'a, K, V, S>
+impl<'a, K, V> OccupiedEntry<'a, K, V>
 where
     V: PartialEq,
 {
@@ -1851,7 +1853,7 @@ where
             .get_mut()
             .insert_unique(index, value)
             .or_else(|| {
-                unsafe { self.map.as_mut() }.inc_num_values(1);
+                self.inc_num_values(1);
                 None
             })
     }
@@ -1885,13 +1887,13 @@ where
     #[inline]
     pub fn push_unique(&mut self, value: V) -> Option<V> {
         self.inner.get_mut().push_unique(value).or_else(|| {
-            unsafe { self.map.as_mut() }.inc_num_values(1);
+            self.inc_num_values(1);
             None
         })
     }
 }
 
-impl<'a, K: 'a, V: 'a, S> VacantEntry<'a, K, V, S> {
+impl<'a, K: 'a, V: 'a> VacantEntry<'a, K, V> {
     /// See [`std::collections::hash_map::VacantEntry::key`].
     #[inline]
     pub fn key(&self) -> &K {
@@ -1930,7 +1932,7 @@ impl<'a, K: 'a, V: 'a, S> VacantEntry<'a, K, V, S> {
     #[inline]
     pub fn insert(mut self, value: V) -> &'a mut V {
         let inserted = self.inner.insert(EntryValues::One(value));
-        unsafe { self.map.as_mut() }.inc_num_values(1);
+        unsafe { *self.num_values.as_mut() += 1 };
         debug_assert_eq!(inserted.len(), 1);
         &mut inserted[0]
     }
