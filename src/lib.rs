@@ -337,14 +337,14 @@ pub struct MultiMap<K, V, S = RandomState> {
 }
 
 impl<K, V> MultiMap<K, V, RandomState> {
-    /// See [`HashMap::new`].
+    /// See [`HashMap::new()`](HashMap::new).
     #[inline]
     #[must_use]
     pub fn new() -> MultiMap<K, V, RandomState> {
         Default::default()
     }
 
-    /// See [`HashMap::with_capacity`].
+    /// See [`HashMap::with_capacity()`](HashMap::with_capacity).
     #[inline]
     #[must_use]
     pub fn with_capacity(capacity: usize) -> MultiMap<K, V, RandomState> {
@@ -353,7 +353,7 @@ impl<K, V> MultiMap<K, V, RandomState> {
 }
 
 impl<K, V, S> MultiMap<K, V, S> {
-    /// See [`HashMap::with_hasher`].
+    /// See [`HashMap::with_hasher()`](HashMap::with_hasher).
     #[inline]
     #[must_use]
     pub fn with_hasher(hash_builder: S) -> MultiMap<K, V, S> {
@@ -363,7 +363,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         }
     }
 
-    /// See [`HashMap::with_capacity_and_hasher`].
+    /// See [`HashMap::with_capacity_and_hasher()`](HashMap::with_capacity_and_hasher).
     #[inline]
     #[must_use]
     pub fn with_capacity_and_hasher(capacity: usize, hasher: S) -> MultiMap<K, V, S> {
@@ -373,13 +373,13 @@ impl<K, V, S> MultiMap<K, V, S> {
         }
     }
 
-    /// See [`HashMap::capacity`].
+    /// See [`HashMap::capacity()`](HashMap::capacity).
     #[inline]
     pub fn capacity(&self) -> usize {
         self.inner.capacity()
     }
 
-    /// See [`HashMap::keys`].
+    /// See [`HashMap::keys()`](HashMap::keys).
     ///
     /// # Examples
     ///
@@ -404,7 +404,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.inner.keys()
     }
 
-    /// See [`HashMap::into_keys`].
+    /// See [`HashMap::into_keys()`](HashMap::into_keys).
     ///
     /// # Examples
     ///
@@ -431,7 +431,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.inner.into_keys()
     }
 
-    /// See [`HashMap::values`].
+    /// See [`HashMap::values()`](HashMap::values).
     ///
     /// # Examples
     ///
@@ -459,7 +459,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.inner.values()
     }
 
-    /// See [`HashMap::values_mut`].
+    /// See [`HashMap::values_mut()`](HashMap::values_mut).
     ///
     /// # Examples
     ///
@@ -496,7 +496,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.inner.values_mut()
     }
 
-    /// See [`HashMap::into_values`].
+    /// See [`HashMap::into_values()`](HashMap::into_values).
     ///
     /// # Examples
     ///
@@ -526,7 +526,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.inner.into_values()
     }
 
-    /// See [`HashMap::iter`].
+    /// See [`HashMap::iter()`](HashMap::iter).
     ///
     /// # Examples
     ///
@@ -552,7 +552,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.inner.iter()
     }
 
-    /// See [`HashMap::iter_mut`].
+    /// See [`HashMap::iter_mut()`](HashMap::iter_mut).
     ///
     /// # Examples
     ///
@@ -649,7 +649,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         MultiIterMut::new(self.iter_mut(), num_values)
     }
 
-    /// See [`HashMap::len`], but replace "elements" with "keys".
+    /// See [`HashMap::len()`](HashMap::len), but replace "elements" with "keys".
     ///
     /// # Examples
     ///
@@ -684,13 +684,13 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.num_values
     }
 
-    /// See [`HashMap::is_empty`], but replace "elements" with "keys".
+    /// See [`HashMap::is_empty()`](HashMap::is_empty), but replace "elements" with "keys".
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
-    /// See [`HashMap::drain`].
+    /// See [`HashMap::drain()`](HashMap::drain).
     ///
     /// # Examples
     ///
@@ -725,7 +725,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         drain
     }
 
-    /// See [`HashMap::retain`], but replace "elements" with "keys".
+    /// See [`HashMap::retain()`](HashMap::retain), but replace "elements" with "keys".
     ///
     /// # Examples
     ///
@@ -833,7 +833,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         })
     }
 
-    /// See [`HashMap::clear`].
+    /// See [`HashMap::clear()`](HashMap::clear).
     ///
     /// # Examples
     ///
@@ -859,7 +859,7 @@ impl<K, V, S> MultiMap<K, V, S> {
         self.num_values = 0;
     }
 
-    /// See [`HashMap::hasher`].
+    /// See [`HashMap::hasher()`](HashMap::hasher).
     #[inline]
     pub fn hasher(&self) -> &S {
         self.inner.hasher()
@@ -881,31 +881,33 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
-    /// See [`HashMap::reserve`], but replace "elements" with "keys".
+    /// See [`HashMap::reserve()`](HashMap::reserve), but replace "elements" with "keys".
     #[inline]
     pub fn reserve(&mut self, additional: usize) {
         self.inner.reserve(additional)
     }
 
-    /// See [`HashMap::try_reserve`], but replace "elements" with "keys".
+    /// See [`HashMap::try_reserve()`](HashMap::try_reserve), but replace "elements" with "keys".
     #[inline]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.inner.try_reserve(additional)
     }
 
-    /// See [`HashMap::shrink_to_fit`].
+    /// See [`HashMap::shrink_to_fit()`](HashMap::shrink_to_fit).
     #[inline]
     pub fn shrink_to_fit(&mut self) {
         self.inner.shrink_to_fit();
     }
 
-    /// See [`HashMap::shrink_to`].
+    /// See [`HashMap::shrink_to()`](HashMap::shrink_to).
     #[inline]
     pub fn shrink_to(&mut self, min_capacity: usize) {
         self.inner.shrink_to(min_capacity);
     }
 
-    /// See [`HashMap::entry`].
+    /// See [`HashMap::entry()`](HashMap::entry).
+    ///
+    /// # Examples
     ///
     /// ```
     /// use minimultimap::{ MultiMap, Entry };
@@ -939,7 +941,7 @@ where
         }
     }
 
-    /// See [`HashMap::get`].
+    /// See [`HashMap::get()`](HashMap::get).
     #[inline]
     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&[V]>
     where
@@ -973,7 +975,7 @@ where
         self.get(k).map(<[V]>::iter).unwrap_or([].iter())
     }
 
-    /// See [`HashMap::get_key_value`].
+    /// See [`HashMap::get_key_value()`](HashMap::get_key_value).
     #[inline]
     pub fn get_key_value<Q: ?Sized>(&self, k: &Q) -> Option<(&K, &[V])>
     where
@@ -983,7 +985,7 @@ where
         self.inner.get_key_value(k).map(|(k, v)| (k, v.deref()))
     }
 
-    /// See [`HashMap::contains_key`].
+    /// See [`HashMap::contains_key()`](HashMap::contains_key).
     #[inline]
     pub fn contains_key<Q: ?Sized>(&self, k: &Q) -> bool
     where
@@ -993,7 +995,7 @@ where
         self.inner.contains_key(k)
     }
 
-    /// See [`HashMap::get_mut`].
+    /// See [`HashMap::get_mut()`](HashMap::get_mut).
     #[inline]
     pub fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut [V]>
     where
@@ -1035,9 +1037,9 @@ where
             .unwrap_or([].iter_mut())
     }
 
-    /// See [`HashMap::insert`].
+    /// See [`HashMap::insert()`](HashMap::insert).
     ///
-    /// Keeps the same semantics as [`HashMap::insert`] for drop-in compatibility,
+    /// Keeps the same semantics as [`HashMap::insert()`](HashMap::insert) for drop-in compatibility (i.e. replaces the value(s) at key `k` with a new value `v`),
     /// but would probably be better named `replace()`.
     ///
     /// Use [`add()`](Self::add) / [`add_unique()`](Self::add_unique) to actually add a new (non-unique / unique) value `v` for the key `k`.
@@ -1071,7 +1073,9 @@ where
         }
     }
 
-    /// See [`HashMap::remove`].
+    /// See [`HashMap::remove()`](HashMap::remove).
+    ///
+    /// # Examples
     ///
     /// ```
     /// use minimultimap::{ MultiMap, EntryValues };
@@ -1098,7 +1102,9 @@ where
         removed
     }
 
-    /// See [`HashMap::remove_entry`].
+    /// See [`HashMap::remove_entry()`](HashMap::remove_entry).
+    ///
+    /// # Examples
     ///
     /// ```
     /// use minimultimap::{ MultiMap, EntryValues };
@@ -1127,7 +1133,7 @@ where
     }
 }
 
-/// Result of [`MultiMap::add_unique`].
+/// Result of [`MultiMap::add_unique()`](MultiMap::add_unique).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AddUniqueResult<V> {
     /// Key did not exist in the map - key-value pair was added.
@@ -1147,6 +1153,8 @@ where
     S: BuildHasher,
 {
     /// Tries to add a (unique) value `v` to the list of values for the key `k`.
+    ///
+    /// NOTE: value uniqueness is checked by linearly scanning all values associated with the key, which might be suboptimal.
     ///
     /// NOTE: use [`add()`](Self::add) to add non-unique values for the key `k`.
     ///
@@ -1249,7 +1257,7 @@ impl<K, V, S> Default for MultiMap<K, V, S>
 where
     S: Default,
 {
-    /// See [`HashMap::default`].
+    /// See [`HashMap::default()`](HashMap::default).
     #[inline]
     fn default() -> MultiMap<K, V, S> {
         MultiMap::with_hasher(Default::default())
@@ -1264,7 +1272,7 @@ where
 {
     type Output = [V];
 
-    /// See [`HashMap::index`].
+    /// See [`HashMap::index()`](HashMap::index).
     #[inline]
     fn index(&self, key: &Q) -> &[V] {
         self.get(key).expect("no entry found for key")
@@ -1806,6 +1814,8 @@ where
     /// Tries to insert the (unique) `value` at `index` into this entry.
     /// Returns `None` on success, else returns the error.
     ///
+    /// NOTE: value uniqueness is checked by linearly scanning all values in the entry, which might be suboptimal.
+    ///
     /// # Examples
     ///
     /// ```
@@ -1848,6 +1858,8 @@ where
 
     /// Pushes the (unique) `value` to the end of this entry.
     /// Returns `None` on success, else returns the `value` back if it is not unique.
+    ///
+    /// NOTE: value uniqueness is checked by linearly scanning all values in the entry, which might be suboptimal.
     ///
     /// # Examples
     ///
@@ -1929,7 +1941,7 @@ where
     K: Eq + Hash,
     S: BuildHasher + Default,
 {
-    /// See [`HashMap::from_iter`].
+    /// See [`HashMap::from_iter()`](HashMap::from_iter).
     ///
     /// NOTE: allows non-unique values per key.
     /// You may use [`MultiMap::from_iter_unique`] to only keep unique values.
@@ -1960,7 +1972,7 @@ where
     V: Copy,
     S: BuildHasher + Default,
 {
-    /// See [`HashMap::from_iter`].
+    /// See [`HashMap::from_iter()`](HashMap::from_iter).
     ///
     /// NOTE: allows non-unique values per key.
     /// You may use [`from_iter_unique()`](MultiMap::from_iter_unique) to only keep unique values.
@@ -2003,7 +2015,9 @@ where
     V: PartialEq,
     S: BuildHasher + Default,
 {
-    /// See [`HashMap::from_iter`], but only accepts unique values per key.
+    /// See [`HashMap::from_iter()`](HashMap::from_iter), but only accepts unique values per key.
+    ///
+    /// NOTE: value uniqueness is checked by linearly scanning all values associated with each key, which might be suboptimal.
     ///
     /// You may use [`MultiMap::from_iter`] to allow non-unique values.
     ///
@@ -2033,7 +2047,9 @@ where
     V: PartialEq + Copy,
     S: BuildHasher + Default,
 {
-    /// See [`HashMap::from_iter`], but only accepts unique values per key.
+    /// See [`HashMap::from_iter()`](HashMap::from_iter), but only accepts unique values per key.
+    ///
+    /// NOTE: value uniqueness is checked by linearly scanning all values associated with each key, which might be suboptimal.
     ///
     /// You may use [`MultiMap::from_iter`] to allow non-unique values.
     ///
@@ -2043,7 +2059,7 @@ where
     /// use minimultimap::{ MultiMap, FromIteratorUnique };
     ///
     /// let vec: Vec<_> = [(7, true), (9, false), (7, false), (9, true), (7, true)].into();
-    /// let mmap = MultiMap::<i32, bool>::from_iter_unique(vec);
+    /// let mmap = MultiMap::<i32, bool>::from_iter_unique(vec.iter().map(|t| (&t.0, &t.1)));
     ///
     /// assert_eq!(mmap.len(), 2);
     /// assert_eq!(mmap.multi_len(), 4);
@@ -2063,7 +2079,7 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
-    /// See [`HashMap::extend`].
+    /// See [`HashMap::extend()`](HashMap::extend).
     ///
     /// NOTE: allows non-unique values per key.
     /// You may use [`extend_unique()`](ExtendUnique::extend_unique) to only keep unique values.
@@ -2096,7 +2112,7 @@ where
     V: Copy,
     S: BuildHasher,
 {
-    /// See [`HashMap::extend`], for copyable keys and values.
+    /// See [`HashMap::extend()`](HashMap::extend), for copyable keys and values.
     ///
     /// NOTE: allows non-unique values per key.
     /// You may use [`extend_unique()`](ExtendUnique::extend_unique) to only keep unique values.
@@ -2138,7 +2154,9 @@ where
     V: PartialEq,
     S: BuildHasher,
 {
-    /// See [`HashMap::extend`], but only accepts unique values per key.
+    /// See [`HashMap::extend()`](HashMap::extend), but only accepts unique values per key.
+    ///
+    /// NOTE: value uniqueness is checked by linearly scanning all values associated with each key, which might be suboptimal.
     ///
     /// # Examples
     ///
@@ -2168,7 +2186,9 @@ where
     V: PartialEq + Copy,
     S: BuildHasher,
 {
-    /// See [`HashMap::extend`], for copyable keys and values, but only accepts unique values per key.
+    /// See [`HashMap::extend()`](HashMap::extend), for copyable keys and values, but only accepts unique values per key.
+    ///
+    /// NOTE: value uniqueness is checked by linearly scanning all values associated with each key, which might be suboptimal.
     ///
     /// # Examples
     ///
