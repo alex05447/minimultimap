@@ -949,6 +949,30 @@ where
         self.inner.get(k).map(EntryValues::deref)
     }
 
+    /// Like [`get()`](Self::get), but returns an iterator over references to all values asociated with the key `k`,
+    /// empty if the key is not contained in the map.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let mmap = MultiMap::<i32, &'static str>::from_iter([(7, "foo"), (7, "bar"), (9, "baz")].into_iter());
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// assert!(mmap.get_iter(&7).eq(["foo", "bar"].iter()));
+    /// assert_eq!(mmap.get_iter(&8).len(), 0);
+    /// assert!(mmap.get_iter(&9).eq(["baz"].iter()));
+    /// ```
+    pub fn get_iter<Q: ?Sized>(&self, k: &Q) -> SliceIter<'_, V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.get(k).map(<[V]>::iter).unwrap_or([].iter())
+    }
+
     /// See [`HashMap::get_key_value`].
     #[inline]
     pub fn get_key_value<Q: ?Sized>(&self, k: &Q) -> Option<(&K, &[V])>
@@ -977,6 +1001,38 @@ where
         Q: Hash + Eq,
     {
         self.inner.get_mut(k).map(EntryValues::deref_mut)
+    }
+
+    /// Like [`get_mut()`](Self::get_mut), but returns an iterator over mutable references to all values asociated with the key `k`,
+    /// empty if the key is not contained in the map.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minimultimap::MultiMap;
+    ///
+    /// let mut mmap = MultiMap::<u8, String>::from_iter([(7, "hello".to_string()), (7, "goodbye".to_string()), (9, "foo".to_string())].into_iter());
+    /// assert_eq!(mmap.len(), 2);
+    /// assert_eq!(mmap.multi_len(), 3);
+    ///
+    /// assert!(mmap.get_iter_mut(&7).eq(["hello", "goodbye"].iter_mut()));
+    /// assert_eq!(mmap.get_iter_mut(&8).len(), 0);
+    /// assert!(mmap.get_iter_mut(&9).eq(["foo"].iter_mut()));
+    ///
+    /// for val in mmap.get_iter_mut(&7) {
+    ///     val.push_str(" world");
+    /// }
+    ///
+    /// assert!(mmap.get_iter_mut(&7).eq(["hello world", "goodbye world"].iter_mut()));
+    /// ```
+    pub fn get_iter_mut<Q: ?Sized>(&mut self, k: &Q) -> SliceIterMut<'_, V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.get_mut(k)
+            .map(<[V]>::iter_mut)
+            .unwrap_or([].iter_mut())
     }
 
     /// See [`HashMap::insert`].
