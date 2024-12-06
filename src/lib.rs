@@ -192,12 +192,18 @@ impl<V> EntryValues<V> {
                 let len = existing.len();
                 debug_assert!(len >= 2);
 
+                // Explicitly checking whether index is in bounds before testing for uniqueness.
                 if index > len {
                     return Some(InsertError::index_out_of_bounds(value, self.len_nonzero()));
                 }
 
                 if is_unique(existing, &value) {
-                    vec_insert(existing, index, value).map(InsertError::value_non_unique)
+                    let none_ = vec_insert(existing, index, value);
+                    debug_assert!(
+                        none_.is_none(),
+                        "we know `index` is in bounds and `vec_insert()` should not fail"
+                    );
+                    None
                 } else {
                     Some(InsertError::value_non_unique(value))
                 }
@@ -1362,7 +1368,7 @@ impl<'a, K, V, S> IntoIterator for &'a MultiMap<K, V, S> {
     type IntoIter = Iter<'a, K, EntryValues<V>>;
 
     #[inline]
-    fn into_iter(self) -> Iter<'a, K, EntryValues<V>> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1372,7 +1378,7 @@ impl<'a, K, V, S> IntoIterator for &'a mut MultiMap<K, V, S> {
     type IntoIter = IterMut<'a, K, EntryValues<V>>;
 
     #[inline]
-    fn into_iter(self) -> IterMut<'a, K, EntryValues<V>> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
     }
 }
@@ -1382,7 +1388,7 @@ impl<K, V, S> IntoIterator for MultiMap<K, V, S> {
     type IntoIter = IntoIter<K, EntryValues<V>>;
 
     #[inline]
-    fn into_iter(self) -> IntoIter<K, EntryValues<V>> {
+    fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
     }
 }
